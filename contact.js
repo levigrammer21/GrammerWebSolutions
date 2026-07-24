@@ -6,7 +6,6 @@
 
   const form = document.getElementById("quote-form");
   const status = document.getElementById("form-status");
-
   if (!form || !status) return;
 
   const showStatus = (type, message) => {
@@ -14,14 +13,26 @@
     status.textContent = message;
   };
 
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const errorMessage = (error) => {
+    const code = error?.status ? `EmailJS ${error.status}` : "EmailJS error";
+    const detail = error?.text || error?.message || String(error || "Unknown error");
+    return `${code}: ${detail}`;
+  };
+
+  if (window.emailjs) {
+    emailjs.init({ publicKey: PUBLIC_KEY });
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    if (form.website?.value) return;
+    if (form.elements.website?.value) return;
     if (!form.reportValidity()) return;
 
     if (!window.emailjs) {
-      showStatus("error", "The contact service did not load. Please try again or email levigrammer@gmail.com.");
+      showStatus("error", "EmailJS failed to load. Check your connection and reload the page.");
       return;
     }
 
@@ -44,9 +55,10 @@
       project: data.project || "",
       project_type: data.project || "",
       message: data.message || "",
-      to_name: data.name || "",
-      to_email: data.email || "",
-      owner_email: "levigrammer@gmail.com"
+      owner_name: "Levi Grammer",
+      owner_email: "levigrammer@gmail.com",
+      to_name: "Levi Grammer",
+      to_email: "levigrammer@gmail.com"
     };
 
     button.disabled = true;
@@ -54,29 +66,42 @@
     showStatus("sending", "Sending your message…");
 
     try {
-      emailjs.init({ publicKey: PUBLIC_KEY });
+      const ownerResponse = await emailjs.send(
+        SERVICE_ID,
+        OWNER_TEMPLATE_ID,
+        params,
+        { publicKey: PUBLIC_KEY }
+      );
 
-      // The owner notification is the required send.
-      await emailjs.send(SERVICE_ID, OWNER_TEMPLATE_ID, {
-        ...params,
-        to_name: "Levi Grammer",
-        to_email: "levigrammer@gmail.com"
-      });
+      if (ownerResponse.status !== 200) {
+        throw new Error(`Owner notification returned ${ownerResponse.status}: ${ownerResponse.text}`);
+      }
 
-      // A confirmation failure should not make a successfully delivered inquiry look failed.
+      // EmailJS allows one request per second. Waiting prevents the auto-reply
+      // from being rejected with HTTP 429 immediately after the owner email.
+      await wait(1200);
+
       try {
-        await emailjs.send(SERVICE_ID, REPLY_TEMPLATE_ID, params);
+        await emailjs.send(
+          SERVICE_ID,
+          REPLY_TEMPLATE_ID,
+          {
+            ...params,
+            to_name: data.name || "Customer",
+            to_email: data.email || ""
+          },
+          { publicKey: PUBLIC_KEY }
+        );
       } catch (replyError) {
-        console.warn("EmailJS customer confirmation failed:", replyError);
+        console.warn("Customer auto-reply failed:", replyError);
       }
 
       form.reset();
       showStatus("success", "Message sent successfully. We’ll be in touch soon.");
     } catch (error) {
-      console.error("EmailJS owner notification failed:", error);
-      const detail = error?.text || error?.message || "Unknown EmailJS error";
-      console.error("EmailJS detail:", detail);
-      showStatus("error", "The message could not be sent. Please email levigrammer@gmail.com directly.");
+      const detail = errorMessage(error);
+      console.error(detail, error);
+      showStatus("error", `${detail}. Please email levigrammer@gmail.com directly.`);
     } finally {
       button.disabled = false;
       button.textContent = originalText;
