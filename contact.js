@@ -1,5 +1,5 @@
 (() => {
-  const PUBLIC_KEY = "pZXYHk_x0rmq9Wsl4";
+  const PUBLIC_KEY = "pZXYHk_x0rmq9WsI4";
   const SERVICE_ID = "service_ls823cb";
   const OWNER_TEMPLATE_ID = "template_2tjzwar";
   const REPLY_TEMPLATE_ID = "template_gr9j9dm";
